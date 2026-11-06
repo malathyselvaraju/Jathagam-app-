@@ -1,0 +1,5 @@
+pyswisseph
+geopy
+timezonefinder
+google-genai
+streamlit
