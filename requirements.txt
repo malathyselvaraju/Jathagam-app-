@@ -3,4 +3,4 @@ geopy
 timezonefinder
 pytz
 pyswisseph
-google-genai
+google-generativeai
