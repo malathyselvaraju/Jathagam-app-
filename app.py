@@ -11,7 +11,7 @@ from google import genai
 # ==============================================================
 # 🔴 1. உங்கள் GEMINI API சாவியை இங்கே உள்ளிடவும்
 # ==============================================================
-GEMINI_API_KEY = "AQ.Ab8RN6JaEwiwasbx1Z0LRqNH6lgug6K-fEzUr9cXpp4kQ6h4LA"
+GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"
 
 # பக்க அமைப்புகள் (Mobile Friendly)
 st.set_page_config(page_title="ஜோதிட வாழ்க்கை வரைபடம் 2026", page_icon="🔮", layout="centered")
@@ -100,7 +100,7 @@ with st.form("astro_form"):
 if submit_btn:
     with st.spinner("⏳ சுவிஸ் எபிமெரிஸ் மூலம் கிரக பாகைகள், KP சப்-லார்ட்கள், வாழ்நாள் தசா-புக்தி மற்றும் லைவ் கோட்சாரம் கணக்கிடப்படுகிறது..."):
         try:
-            geolocator = Nominatim(user_agent="jathaga_streamlit_app_v2")
+            geolocator = Nominatim(user_agent="jathaga_app_malathi_live", timeout=10)
             loc = geolocator.geocode(place_name)
             tf = TimezoneFinder()
             tz = pytz.timezone(tf.timezone_at(lng=loc.longitude, lat=loc.latitude))
@@ -268,7 +268,6 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
 {st.session_state['chart_data']}
 """
 
-    # 🌟 11 பிளாக்குகளும் தனித்தனியாக முழுமையான உட்பிரிவுகளோடு (Sub-bullets) அமைக்கப்பட்டுள்ளன:
     BLOCKS_CONFIG = [
         {
             "num": 1,
@@ -411,7 +410,6 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         st.write(f"⏳ ஆய்வு செய்யப்படுகிறது ({b_idx + 1}/11): **{block['title']}**...")
         block_text = None
         
-        # 3.8-flash முயற்சி -> பிஸியானால் 3.5-flash-lite
         try:
             resp = client.models.generate_content(model="gemini-3.8-flash", contents=block["prompt"])
             block_text = resp.text
