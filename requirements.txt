@@ -1,6 +1,6 @@
 streamlit
-pyswisseph
 geopy
 timezonefinder
 pytz
+pyswisseph
 google-genai
