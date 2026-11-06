@@ -338,9 +338,10 @@ if "chart_data" in st.session_state and "prediction_book" not in st.session_stat
 பணி:
 {block['title']} - {block['task']}
 """
+        # கூகுளின் தற்போது நடைமுறையில் உள்ள மிகச் சரியான மாடல் பெயர்கள்
         try:
             resp = client.models.generate_content(
-                model="gemini-2.5-flash", 
+                model="gemini-2.0-flash-exp", 
                 contents=prompt_content,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_RULES,
@@ -348,11 +349,11 @@ if "chart_data" in st.session_state and "prediction_book" not in st.session_stat
                 )
             )
             block_text = resp.text
-        except Exception as e:
+        except Exception:
             time.sleep(2)
             try:
                 resp = client.models.generate_content(
-                    model="gemini-1.5-flash", 
+                    model="gemini-1.5-pro", 
                     contents=prompt_content,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_RULES,
@@ -360,8 +361,8 @@ if "chart_data" in st.session_state and "prediction_book" not in st.session_stat
                     )
                 )
                 block_text = resp.text
-            except Exception as inner_e:
-                block_text = f"⚠️ தற்காலிக சர்வர் பிழை: {inner_e}"
+            except Exception as e:
+                block_text = f"⚠️ தற்காலிக சர்வர் பிழை: {e}"
 
         full_book.append(f"\n\n---\n## 📖 {block['title']}\n\n" + block_text)
         progress_bar.progress((b_idx + 1) / 11)
@@ -413,14 +414,14 @@ if "prediction_book" in st.session_state:
 """
                 try:
                     ans = client.models.generate_content(
-                        model="gemini-2.5-flash", 
+                        model="gemini-2.0-flash-exp", 
                         contents=qa_prompt,
                         config=types.GenerateContentConfig(system_instruction=SYSTEM_RULES)
                     )
                     st.write(ans.text)
                 except Exception:
                     ans = client.models.generate_content(
-                        model="gemini-1.5-flash", 
+                        model="gemini-1.5-pro", 
                         contents=qa_prompt,
                         config=types.GenerateContentConfig(system_instruction=SYSTEM_RULES)
                     )
