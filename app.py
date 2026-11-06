@@ -12,7 +12,9 @@ from google.genai import types
 # ==============================================================
 # 🔴 API KEY பாதுகாப்பு (Streamlit Secrets அல்லது Environment Variable)
 # ==============================================================
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+if not GEMINI_API_KEY:
+    GEMINI_API_KEY = st.text_input("🔑 உங்கள் Gemini API Key இங்கே உள்ளிடவும்:", type="password")
 
 st.set_page_config(page_title="ஜோதிட வாழ்க்கை வரைபடம் 2026", page_icon="🔮", layout="centered")
 
