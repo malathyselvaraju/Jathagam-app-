@@ -1,4 +1,3 @@
-import streamlit as st
 import os
 import time
 from datetime import datetime, timedelta
@@ -6,14 +5,15 @@ import pytz
 from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 import swisseph as swe
+import streamlit as st
 from google import genai
+from google.genai import types
 
 # ==============================================================
-# 🔴 1. உங்கள் GEMINI API சாவியை இங்கே உள்ளிடவும்
+# 🔴 API KEY பாதுகாப்பு (Streamlit Secrets அல்லது Environment Variable)
 # ==============================================================
-GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE"
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))
 
-# பக்க அமைப்புகள் (Mobile Friendly)
 st.set_page_config(page_title="ஜோதிட வாழ்க்கை வரைபடம் 2026", page_icon="🔮", layout="centered")
 
 # ==========================================
@@ -69,10 +69,14 @@ def get_saptamsa_sign(lon):
     return ZODIAC_SIGNS[(s_idx + part) % 12] if s_idx % 2 == 0 else ZODIAC_SIGNS[(s_idx + 6 + part) % 12]
 
 # ==========================================
-# 📱 மொபைல் இடைமுகம் (Mobile User Interface)
+# 📱 மொபைல் இடைமுகம்
 # ==========================================
 st.title("🔮 ஸ்ரீ ஜோதிட ஆச்சாரியார்")
 st.caption("2026 எதார்த்த வாழ்க்கை வரைபடம் (11-Block ஆழமான ஆய்வு & சுவிஸ் எபிமெரிஸ் கணிதம்)")
+
+# கிளவுடில் API Key இல்லையென்றால் பயனரே உள்ளிடும் வசதி
+if not GEMINI_API_KEY:
+    GEMINI_API_KEY = st.text_input("🔑 உங்கள் Gemini API Key உள்ளிடவும்:", type="password")
 
 with st.form("astro_form"):
     st.subheader("📋 ஜாதகர் விவரங்கள்")
@@ -95,16 +99,29 @@ with st.form("astro_form"):
     submit_btn = st.form_submit_button("🚀 11-Block முழு ஜாதகம் கணிக்கவும்", use_container_width=True)
 
 # ==========================================
-# ⚙️ கணிதம் & பலன் உருவாக்கம்
+# ⚙️ கணிதம்
 # ==========================================
 if submit_btn:
+    if not GEMINI_API_KEY:
+        st.error("⚠️ தயவுசெய்து Gemini API சாவியை உள்ளிடவும்!")
+        st.stop()
+
     with st.spinner("⏳ சுவிஸ் எபிமெரிஸ் மூலம் கிரக பாகைகள், KP சப்-லார்ட்கள், வாழ்நாள் தசா-புக்தி மற்றும் லைவ் கோட்சாரம் கணக்கிடப்படுகிறது..."):
         try:
-            geolocator = Nominatim(user_agent="jathaga_app_malathi_live", timeout=10)
+            geolocator = Nominatim(user_agent="jathaga_app_live_v2", timeout=10)
             loc = geolocator.geocode(place_name)
+            if not loc:
+                st.error("⚠️ பிறந்த ஊர் பெயர் கூகுள் மேப்பில் கிடைக்கவில்லை. சரியான ஊர் மற்றும் மாநிலத்தை உள்ளிடவும் (எ.கா: Madurai, Tamil Nadu).")
+                st.stop()
+
             tf = TimezoneFinder()
-            tz = pytz.timezone(tf.timezone_at(lng=loc.longitude, lat=loc.latitude))
-            birth_dt = datetime.strptime(f"{dob_str} {tob_str}", "%Y-%m-%d %H:%M")
+            tz_str = tf.timezone_at(lng=loc.longitude, lat=loc.latitude)
+            if not tz_str:
+                st.error("⚠️ கால மண்டலத்தை (Timezone) கண்டறிய முடியவில்லை.")
+                st.stop()
+
+            tz = pytz.timezone(tz_str)
+            birth_dt = datetime.strptime(f"{dob_str.strip()} {tob_str.strip()}", "%Y-%m-%d %H:%M")
             local_dt = tz.localize(birth_dt)
             utc_dt = local_dt.astimezone(pytz.utc)
 
@@ -117,15 +134,14 @@ if submit_btn:
             l_sign_idx = int(lagna_lon / 30)
             l_star, l_pada, l_star_l, l_sub_l = get_star_and_sublord(lagna_lon)
 
-            planets_data = []
-            moon_lon = 0
-            planets_data.append({
+            planets_data = [{
                 "name": "Lagna (Asc)", "lon": lagna_lon, "sign": ZODIAC_SIGNS[l_sign_idx],
                 "deg": f"{int(lagna_lon%30):02d}° {int(((lagna_lon%30)%1)*60):02d}'",
                 "star": l_star, "pada": l_pada, "star_lord": l_star_l, "sub_lord": l_sub_l, "retro": "-",
                 "d9": get_navamsa_sign(lagna_lon), "d10": get_dasamsa_sign(lagna_lon), "d7": get_saptamsa_sign(lagna_lon)
-            })
+            }]
 
+            moon_lon = 0
             for p_name, p_code in PLANETS_MAP.items():
                 res, _ = swe.calc_ut(jd, p_code, swe.FLG_SIDEREAL | swe.FLG_SWIEPH)
                 lon = res[0] % 360
@@ -139,9 +155,10 @@ if submit_btn:
                     "star": star, "pada": pada, "star_lord": star_l, "sub_lord": sub_l, "retro": is_retro,
                     "d9": get_navamsa_sign(lon), "d10": get_dasamsa_sign(lon), "d7": get_saptamsa_sign(lon)
                 })
-                if p_name == "Moon": moon_lon = lon
+                if p_name == "Moon": 
+                    moon_lon = lon
 
-            rahu_obj = [p for p in planets_data if p['name'] == 'Rahu'][0]
+            rahu_obj = next(p for p in planets_data if p['name'] == 'Rahu')
             ketu_lon = (rahu_obj['lon'] + 180) % 360
             k_idx = int(ketu_lon / 30)
             k_star, k_pada, k_star_l, k_sub_l = get_star_and_sublord(ketu_lon)
@@ -236,7 +253,8 @@ if "chart_data" in st.session_state and "prediction_book" not in st.session_stat
     st.info("🚀 இப்போது 11-Block முழுமையான ஆழமான வாழ்க்கை வரலாற்று நூல் தயாராகிறது (சுமார் 1–2 நிமிடங்கள் ஆகும்)...")
     progress_bar = st.progress(0)
     
-    BASE_RULES = f"""
+    # 🔴 உங்கள் முழுமையான விதிகள் அனைத்தும் அச்சு மாறாமல் இங்கே உள்ளது!
+    SYSTEM_RULES = """
 🔥 THE 2026 REALITY SUPREME MASTER ENGINE
 
 🧠 ROLE DEFINITION & ARCHIVAL PERSONA:
@@ -263,16 +281,13 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
    - தாமதத்திற்கும் (Delay), மறுப்பிற்கும் (Denial), மருத்துவ உதவிக்கும் உள்ள வித்தியாசத்தை உணர வேண்டும். செவ்வாய், சனி சம்பந்தப்பட்டால் அது அறுவை சிகிச்சை (Surgery / C-Section)-ஐக் குறிக்குமே தவிர, தானாகவே IVF அல்லது மலட்டுத்தன்மை ஆகாது. தீவிர கிரகப் பாதிப்புகள் இருந்தால் மட்டுமே தீவிர மருத்துவ மலட்டுத்தன்மையை (Infertility/IVF) கணிக்க வேண்டும்.
 5. PRE-FLIGHT REALITY AUDIT:
    - பலனைத் திரையில் எழுதுவதற்கு முன், இது வெறும் 8-ம் பாவ பயமுறுத்தலா அல்லது லக்ன/ராசி பலம், ஆட்சி பலம் மற்றும் 2, 11 பாவங்களின் பலத்தை ஒப்பிட்டுப் பார்த்து எழுதப்படும் சமநிலையான எதார்த்தமா என சுயதணிக்கை செய்ய வேண்டும்.
-
-ஜாதகரின் அசல் தொழில்நுட்பத் தரவுகள், வாழ்நாள் தசா-புக்தி & சூழல்:
-{st.session_state['chart_data']}
 """
 
     BLOCKS_CONFIG = [
         {
             "num": 1,
             "title": "BLOCK 1: அகம், ஆளுமை மற்றும் நிஜ முகம் (CORE PERSONALITY & HIDDEN MINDSET)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 1-ஐ தணிக்கை விதிகளுடன் முழு ஆழத்துடன் விரிவாக எழுதுக:
 🔹 BLOCK 1: அகம், ஆளுமை மற்றும் நிஜ முகம் (CORE PERSONALITY & HIDDEN MINDSET)
 - லக்னம், லக்னாதிபதி மற்றும் 1-ம் பாவ Sub-lord ஆய்வு.
@@ -284,7 +299,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 2,
             "title": "BLOCK 2: கர்ம வித்து மற்றும் நவாம்ச பலம் (NAVAMSA & HIDDEN KARMA)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 2-ஐ முழு ஆழத்துடன் விரிவாக எழுதுக:
 🔹 BLOCK 2: கர்ம வித்து மற்றும் நவாம்ச பலம் (NAVAMSA & HIDDEN KARMA)
 - ராசி (D1) மற்றும் நவாம்சம் (D9) ஒப்பீடு: 28-32 வயதுக்கு பிறகு அல்லது திருமணத்திற்குப் பிறகு வாழ்வில் ஏற்படும் உள்மன மற்றும் உலகியல் மாற்றங்கள்.
@@ -296,7 +311,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 3,
             "title": "BLOCK 3: இளமைப் பருவம், காதல் மற்றும் உணர்வுக் காயங்கள் (YOUTH, LOVE & HEARTBREAKS)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 3-ஐ எந்தவொரு சுகர்கோட்டிங்கும் இன்றி உண்மையாக எழுதுக:
 🔹 BLOCK 3: இளமைப் பருவம், காதல் மற்றும் உணர்வுக் காயங்கள் (YOUTH, LOVE & HEARTBREAKS)
 - 16 முதல் 25 வயது வரையிலான காலகட்டத்தில் 5-ம் பாவம், சுக்கிரன், செவ்வாய், ராகு/கேது ஆய்வு.
@@ -308,7 +323,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 4,
             "title": "BLOCK 4: திருமணம், தாம்பத்தியம் மற்றும் குடும்ப எதார்த்தம் (MARRIAGE & IN-LAW DYNAMICS)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 4-ஐ ஜாதகர் குறிப்பிட்ட திருமண நிலைக்கு ஏற்ப மிக ஆழமாக எழுதுக:
 🔹 BLOCK 4: திருமணம், தாம்பத்தியம் மற்றும் குடும்ப எதார்த்தம் (MARRIAGE & IN-LAW DYNAMICS)
 - திருமண நிலைக்கேற்ப ஆய்வு (திருமணம் ஆனவர் / ஆகாதவர் / விவாகரத்து / 2-ம் திருமணம் தேடுபவர் / பிரிந்து வாழ்பவர்).
@@ -323,7 +338,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 5,
             "title": "BLOCK 5: புத்திர பாக்கியம் மற்றும் மருத்துவ எதார்த்தம் (PROGENY & IVF / MEDICAL CONCEPTION)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 5-ஐ "SEPARATION OF EVENT DENIAL VS DELIVERY MODE" விதியைப் பின்பற்றி எழுதுக:
 🔹 BLOCK 5: புத்திர பாக்கியம் மற்றும் மருத்துவ எதார்த்தம் (PROGENY & IVF / MEDICAL CONCEPTION)
 - 5-ம் பாவ Sub-lord, குரு மற்றும் D7 சப்தாம்ச ஆய்வு.
@@ -336,7 +351,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 6,
             "title": "BLOCK 6: வாழ்வாதாரம், உத்தியோகம் அல்லது குடும்ப நிர்வாகம் (CAREER / HOMEMAKER DYNAMICS)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 6-ஐ ஜாதகர் குறிப்பிட்ட நிலைக்கு ஏற்ப (இல்லத்தரசி vs உத்தியோகம்) விரிவாக எழுதுக:
 🔹 BLOCK 6: வாழ்வாதாரம், உத்தியோகம் அல்லது குடும்ப நிர்வாகம் (CAREER / HOMEMAKER DYNAMICS)
 - உத்தியோகம்/தொழில் செய்பவர் என்றால்: 10-ம் பாவ Sub-lord, D10 அடிப்படையில் வேலை மாற்றம், ஆபிஸ் பாலிடிக்ஸ், தொழில் உச்சம்.
@@ -347,7 +362,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 7,
             "title": "BLOCK 7: பொருளாதாரம், சொத்து மற்றும் கடன் அபாயங்கள் (WEALTH, PROPERTY & DEBT TRAPS)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 7-ஐ விரிவாக எழுதுக:
 🔹 BLOCK 7: பொருளாதாரம், சொத்து மற்றும் கடன் அபாயங்கள் (WEALTH, PROPERTY & DEBT TRAPS)
 - 2 மற்றும் 11-ம் பாவ Sub-lord (பண வரவு மற்றும் சேமிப்பு).
@@ -359,7 +374,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 8,
             "title": "BLOCK 8: ஆயுள், ஆரோக்கியம் மற்றும் கண்ட காலங்கள் (LONGEVITY, HEALTH & CRISIS PERIODS)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 8-ஐ ஆயுள் மற்றும் மாரக/பாதக விதிகளுடன் விரிவாக எழுதுக:
 🔹 BLOCK 8: ஆயுள், ஆரோக்கியம் மற்றும் கண்ட காலங்கள் (LONGEVITY, HEALTH & CRISIS PERIODS)
 - லக்ன Sub-lord மற்றும் 8-ம் பாவ Sub-lord காட்டும் ஆயுள் பலம் (அற்பாயுள்: 0-33 / மத்தியாயுள்: 34-66 / தீர்க்காயுள்: 67-85+).
@@ -371,7 +386,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 9,
             "title": "BLOCK 9: காலச்சக்கரம் - வாழ்நாள் தசா புத்தி காலவரிசை (DASHA BIOGRAPHY)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 9-ஐ வாழ்நாள் தசா-புக்தி அட்டவணையின் அடிப்படையில் விரிவாக எழுதுக:
 🔹 BLOCK 9: காலச்சக்கரம் - தசா புத்தி காலவரிசை (DASHA BIOGRAPHY)
 - கடந்து வந்த தசாக்களின் முக்கிய திருப்புமுனைகள்.
@@ -383,7 +398,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 10,
             "title": "BLOCK 10: நடப்பு கோட்சார காலக்கண்ணாடி (REAL-TIME TRANSIT IMPACT - NEXT 1-3 YEARS)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 10-ஐ இன்றைய லைவ் கோட்சார கிரக நிலைகளை அடிப்படையாக வைத்து எழுதுக:
 🔹 BLOCK 10: நடப்பு கோட்சார காலக்கண்ணாடி (REAL-TIME TRANSIT IMPACT - NEXT 1-3 YEARS)
 - இன்றைய கோட்சார கிரகங்களின் (சனி, குரு, ராகு-கேது) சேர்க்கை நடப்பு தசா-புக்தியோடு இணையும் விதம்.
@@ -393,7 +408,7 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         {
             "num": 11,
             "title": "BLOCK 11: கர்ம பரிகாரங்கள் & இறுதி வாழ்வியல் வரைபடம் (PRACTICAL REMEDIES & SOUL BLUEPRINT)",
-            "prompt": BASE_RULES + """
+            "task": """
 கீழ்க்கண்ட BLOCK 11-ஐ முழுமையாக எழுதி நிறைவு செய்க:
 🔹 BLOCK 11: கர்ம பரிகாரங்கள் & இறுதி வாழ்வியல் வரைபடம் (PRACTICAL REMEDIES & SOUL BLUEPRINT)
 - எளிய குலதெய்வ / ஆன்மீக வழிகாட்டல்கள்.
@@ -410,20 +425,42 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
         st.write(f"⏳ ஆய்வு செய்யப்படுகிறது ({b_idx + 1}/11): **{block['title']}**...")
         block_text = None
         
+        prompt_content = f"""
+ஜாதகரின் அசல் தொழில்நுட்பத் தரவுகள், வாழ்நாள் தசா-புக்தி & சூழல்:
+{st.session_state['chart_data']}
+
+பணி:
+{block['task']}
+"""
+        # அதிகாரப்பூர்வ Gemini 2.5 Flash / 1.5 Flash மாடல்கள் மட்டுமே பயன்படுத்தப்பட்டுள்ளது
         try:
-            resp = client.models.generate_content(model="gemini-3.8-flash", contents=block["prompt"])
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash", 
+                contents=prompt_content,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_RULES,
+                    temperature=0.4
+                )
+            )
             block_text = resp.text
-        except:
+        except Exception:
             time.sleep(2)
             try:
-                resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=block["prompt"])
+                resp = client.models.generate_content(
+                    model="gemini-1.5-flash", 
+                    contents=prompt_content,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_RULES,
+                        temperature=0.4
+                    )
+                )
                 block_text = resp.text
             except Exception as e:
                 block_text = f"⚠️ தற்காலிக சர்வர் பிழை: {e}"
 
         full_book.append(f"\n\n---\n## 📖 {block['title']}\n\n" + block_text)
         progress_bar.progress((b_idx + 1) / 11)
-        time.sleep(2)
+        time.sleep(1)
 
     st.session_state["prediction_book"] = "\n".join(full_book)
     st.success("🎉 11-Block முழுமையான ஆழமான வாழ்க்கை வரலாற்று நூல் தயாராகிவிட்டது!")
@@ -461,14 +498,25 @@ if "prediction_book" in st.session_state:
             with st.spinner("⏳ சப்-லார்ட் மற்றும் தசா-புக்தியை ஆய்வு செய்கிறது..."):
                 client = genai.Client(api_key=GEMINI_API_KEY)
                 qa_prompt = f"""
-                நீங்கள் 40+ வருட அனுபவமிக்க முதன்மை ஜோதிட ஆச்சாரியார்.
-                ஜாதகர் தரவு & வாழ்நாள் தசா-புக்தி: {st.session_state['chart_data']}
-                கேள்வி: "{user_q}"
-                விதிகள்: எளிய தமிழில், நேரடி உண்மையை மட்டும் பேசவும் (No Sugarcoating). ஆட்சி/உச்ச பலம், மறுப்பு vs நிகழ்வு முறை தணிக்கை விதிகளைப் பின்பற்றி, சப்-லார்ட் & தசா-புக்தி அடிப்படையில் எப்போது நடக்கும் (Month/Year) எனக் கணித்து எளிய பரிகாரம் கூறுக.
-                """
+ஜாதகர் தரவு & வாழ்நாள் தசா-புக்தி:
+{st.session_state['chart_data']}
+
+கேள்வி: "{user_q}"
+
+விதிகள்:
+எளிய தமிழில், நேரடி உண்மையை மட்டும் பேசவும் (No Sugarcoating). ஆட்சி/உச்ச பலம், மறுப்பு vs நிகழ்வு முறை தணிக்கை விதிகளைப் பின்பற்றி, சப்-லார்ட் & தசா-புக்தி அடிப்படையில் எப்போது நடக்கும் (Month/Year) எனக் கணித்து எளிய பரிகாரம் கூறுக.
+"""
                 try:
-                    ans = client.models.generate_content(model="gemini-3.8-flash", contents=qa_prompt)
+                    ans = client.models.generate_content(
+                        model="gemini-2.5-flash", 
+                        contents=qa_prompt,
+                        config=types.GenerateContentConfig(system_instruction=SYSTEM_RULES)
+                    )
                     st.write(ans.text)
-                except:
-                    ans = client.models.generate_content(model="gemini-3.5-flash-lite", contents=qa_prompt)
+                except Exception:
+                    ans = client.models.generate_content(
+                        model="gemini-1.5-flash", 
+                        contents=qa_prompt,
+                        config=types.GenerateContentConfig(system_instruction=SYSTEM_RULES)
+                    )
                     st.write(ans.text)
