@@ -6,8 +6,7 @@ from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 import swisseph as swe
 import streamlit as st
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 # ==============================================================
 # 🔴 API KEY பாதுகாப்பு
@@ -15,6 +14,9 @@ from google.genai import types
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 if not GEMINI_API_KEY:
     GEMINI_API_KEY = st.text_input("🔑 உங்கள் Gemini API Key இங்கே உள்ளிடவும்:", type="password")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 st.set_page_config(page_title="ஜோதிட வாழ்க்கை வரைபடம் 2026", page_icon="🔮", layout="centered")
 
@@ -26,7 +28,7 @@ SYSTEM_RULES = """
 
 🧠 ROLE DEFINITION & ARCHIVAL PERSONA:
 நீங்கள் 40+ வருட ஆழ்ந்த அனுபவம் கொண்ட முதன்மை ஜோதிட ஆச்சாரியார் (Senior Jyotish Acharya).
-பிருஹத் பராசரர், பலதீபிகை, சாராவளி, புலிப்பாணி சித்தர் மற்றும் KP 249 சப்-லார்ட் விதிகளின் அத்தனை ஞானமும் உங்கள் உள்மன ஆய்வில் (Silent Background Engine) முழுமையாக இயங்க வேண்டும். ஆனால் வெளியே பேசும்போது ஜோதிடப் புத்தக விவாதங்கள் இல்லாமல், அசல் வாழ்க்கைப் பலன்கள் மட்டுமே வர வேண்டும்.
+பிருஹத் பராசரர், பலதீபிகை, சாராவளி, புலிப்பாணி சித்தர் மற்றும் KP 249 சப்-லார்ட் விதிகளின் அத்தனை ஞானமும் உங்கள் உள்மன ஆய்வில் முழுமையாக இயங்க வேண்டும். ஆனால் வெளியே பேசும்போது ஜோதிடப் புத்தக விவாதங்கள் இல்லாமல், அசல் வாழ்க்கைப் பலன்கள் மட்டுமே வர வேண்டும்.
 Voice & Tone: ஒரு முதிர்ந்த ஞானியின் கனிவான, அதே சமயம் சமரசமற்ற, முகத்தில் அடித்தாற்போல் உண்மைகளைப் பேசும் காரசாரமான நடை (Honest, Direct & Strictly No Sugarcoating).
 
 🔴 MANDATORY LANGUAGE & WRITING RULES:
@@ -39,15 +41,11 @@ Voice & Tone: ஒரு முதிர்ந்த ஞானியின் க
 
 🔴 MANDATORY ASTROLOGICAL GUARDRAILS & LOGIC ENGINE (கட்டாய ஜோதிடத் தணிக்கை விதிகள்):
 1. RULE OF DIGNITY OVERRIDE (ஆட்சி / உச்ச பல விதி):
-   - ஒரு கிரகம் 6, 8, 12 ஆகிய மறைவிடங்களில் நின்றாலும், அது தனது சொந்த வீட்டிலோ (Swakshetra) அல்லது உச்ச வீட்டிலோ (Exalted) நின்றால், அது அந்த பாவத்தைக் கெடுக்காது; மாறாகத் தன் சொந்த காரகத்துவத்தைப் பாதுகாக்கும். எக்காரணம் கொண்டும் ஆட்சி/உச்சம் பெற்ற கிரகத்திற்கு "முழுமையான அழிவு, இழப்பு, புத்திரக் கேடு, வறுமை" போன்ற குருட்டுப் பலன்களை எழுதக் கூடாது.
+   - ஒரு கிரகம் 6, 8, 12 ஆகிய மறைவிடங்களில் நின்றாலும், அது தனது சொந்த வீட்டிலோ அல்லது உச்ச வீட்டிலோ நின்றால், அது அந்த பாவத்தைக் கெடுக்காது; மாறாகத் தன் சொந்த காரகத்துவத்தைப் பாதுகாக்கும். எக்காரணம் கொண்டும் ஆட்சி/உச்சம் பெற்ற கிரகத்திற்கு முழுமையான அழிவு, இழப்பு போன்ற குருட்டுப் பலன்களை எழுதக் கூடாது.
 2. SHADOW PLANET AGENT PROTOCOL (ராகு/கேது பிரதிநிதித்துவ விதி):
-   - ராகு அல்லது கேதுவை வெறும் அசுப கிரகமாகவோ நேரடியாக எடுக்கக் கூடாது. ராகு/கேது அமர்ந்த ராசிநாதன் யார்? அந்த ராசிநாதன் எந்த பாவத்திற்கு அதிபதி? என்பதைப் பார்க்க வேண்டும். அந்த ராசிநாதன் சுப பலன் தரும் பாவத்திற்கு அதிபதியாக இருந்தால், ராகு/கேது அந்த ராசிநாதனின் சுப பலனையே (Agent of the Dispositor) தரும்.
+   - ராகு அல்லது கேதுவை வெறும் அசுப கிரகமாகவோ நேரடியாக எடுக்கக் கூடாது. ராகு/கேது அமர்ந்த ராசிநாதன் எந்த பாவத்திற்கு அதிபதி என்பதைப் பார்த்து, அதன் சுப பலனையே (Agent of the Dispositor) தர வேண்டும்.
 3. KP SIGNIFICATION BALANCE (2, 5, 11 vs 6, 8, 12 சமநிலை விதி):
-   - ஒரு சப்-லார்ட் 8 அல்லது 12-ஐ தொடர்பு கொண்டாலும், அதே சமயம் 2, 5, 11-ஐயும் தொடர்பு கொண்டால் நிகழ்வு உறுதியாக நடக்கும். 8 மற்றும் 12 என்பது அதற்காகச் செய்யும் செலவு, மன அழுத்தம் அல்லது பிரசவ முறை (C-Section/Surgery) போன்ற 'வழியை' மட்டுமே குறிக்கும்.
-4. SEPARATION OF "EVENT DENIAL" VS "DELIVERY MODE" (நிகழ்வு மறுப்பு vs நிகழும் விதம்):
-   - தாமதத்திற்கும் (Delay), மறுப்பிற்கும் (Denial), மருத்துவ உதவிக்கும் உள்ள வித்தியாசத்தை உணர வேண்டும். செவ்வாய், சனி சம்பந்தப்பட்டால் அது அறுவை சிகிச்சை (Surgery / C-Section)-ஐக் குறிக்குமே தவிர, தானாகவே IVF அல்லது மலட்டுத்தன்மை ஆகாது. தீவிர கிரகப் பாதிப்புகள் இருந்தால் மட்டுமே தீவிர மருத்துவ மலட்டுத்தன்மையை (Infertility/IVF) கணிக்க வேண்டும்.
-5. PRE-FLIGHT REALITY AUDIT:
-   - பலனைத் திரையில் எழுதுவதற்கு முன், இது வெறும் 8-ம் பாவ பயமுறுத்தலா அல்லது லக்ன/ராசி பலம், ஆட்சி பலம் மற்றும் 2, 11 பாவங்களின் பலத்தை ஒப்பிட்டுப் பார்த்து எழுதப்படும் சமநிலையான எதார்த்தமா என சுயதணிக்கை செய்ய வேண்டும்.
+   - ஒரு சப்-லார்ட் 8 அல்லது 12-ஐ தொடர்பு கொண்டாலும், அதே சமயம் 2, 5, 11-ஐயும் தொடர்பு கொண்டால் நிகழ்வு உறுதியாக நடக்கும். 8, 12 என்பது அதற்காகச் செய்யும் செலவு, மருத்துவ முறை (C-Section/Surgery) போன்ற 'வழியை' மட்டுமே குறிக்கும்.
 """
 
 # ==========================================
@@ -107,9 +105,6 @@ def get_saptamsa_sign(lon):
 # ==========================================
 st.title("🔮 ஸ்ரீ ஜோதிட ஆச்சாரியார்")
 st.caption("2026 எதார்த்த வாழ்க்கை வரைபடம் (11-Block ஆழமான ஆய்வு & சுவிஸ் எபிமெரிஸ் கணிதம்)")
-
-if not GEMINI_API_KEY:
-    GEMINI_API_KEY = st.text_input("🔑 உங்கள் Gemini API Key இங்கே உள்ளிடவும்:", type="password")
 
 with st.form("astro_form"):
     st.subheader("📋 ஜாதகர் விவரங்கள்")
@@ -319,12 +314,12 @@ if "chart_data" in st.session_state and "prediction_book" not in st.session_stat
         {"num": 6, "title": "BLOCK 6: வாழ்வாதாரம், உத்தியோகம் அல்லது குடும்ப நிர்வாகம்", "task": "நிலைக்கேற்ப (இல்லத்தரசி vs உத்தியோகம்): 10-ம் பாவ Sub-lord, வரவு-செலவு அதிகாரம், ஆபிஸ் பாலிடிக்ஸ்/கௌரவம்."},
         {"num": 7, "title": "BLOCK 7: பொருளாதாரம், சொத்து மற்றும் கடன் அபாயங்கள்", "task": "2 மற்றும் 11-ம் பாவ Sub-lord, பண வரவு, சொந்த வீடு/நிலம், கடன் அபாய எச்சரிக்கைகள்."},
         {"num": 8, "title": "BLOCK 8: ஆயுள், ஆரோக்கியம் மற்றும் கண்ட காலங்கள்", "task": "லக்னம் & 8-ம் பாவம் Sub-lord, ஆயுள் பலம், உறுப்பு பலவீனங்கள், மாரக/பாதக காலங்கள்."},
-        {"num": 9, "title": "BLOCK 9: காலச்சக்கரம் - தசா புத்தி காலவரிசை", "task": "கடந்த கால திருப்புமுனைகள், தற்போதைய மகா தசா-புக்தியின் நிலை, அடுத்த 3-5 ஆண்டு எச்சரிக்கைகள்."},
+        {"num": 9, "title": "BLOCK 9: காலச்சக்கரம் - வாழ்நாள் தசா புத்தி காலவரிசை", "task": "கடந்த கால திருப்புமுனைகள், தற்போதைய மகா தசா-புக்தியின் நிலை, அடுத்த 3-5 ஆண்டு எச்சரிக்கைகள்."},
         {"num": 10, "title": "BLOCK 10: நடப்பு கோட்சார காலக்கண்ணாடி", "task": "சனி, குரு, ராகு-கேது கோட்சாரம் நடப்பு தசா-புக்தியுடன் இணையும் விதம், அடுத்த 1-3 ஆண்டு மாற்றங்கள்."},
         {"num": 11, "title": "BLOCK 11: கர்ம பரிகாரங்கள் & இறுதி வாழ்வியல் வரைபடம்", "task": "எளிய பரிகாரங்கள், மாற்றிக்கொள்ள வேண்டிய சுபாவங்கள், வாழ்வியல் தாரக மந்திரம்."}
     ]
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=SYSTEM_RULES)
     full_book = []
     
     for b_idx, block in enumerate(BLOCKS_CONFIG):
@@ -338,31 +333,11 @@ if "chart_data" in st.session_state and "prediction_book" not in st.session_stat
 பணி:
 {block['title']} - {block['task']}
 """
-        # கூகுளின் தற்போது நடைமுறையில் உள்ள மிகச் சரியான மாடல் பெயர்கள்
         try:
-            resp = client.models.generate_content(
-                model="gemini-2.0-flash-exp", 
-                contents=prompt_content,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_RULES,
-                    temperature=0.4
-                )
-            )
-            block_text = resp.text
-        except Exception:
-            time.sleep(2)
-            try:
-                resp = client.models.generate_content(
-                    model="gemini-1.5-pro", 
-                    contents=prompt_content,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_RULES,
-                        temperature=0.4
-                    )
-                )
-                block_text = resp.text
-            except Exception as e:
-                block_text = f"⚠️ தற்காலிக சர்வர் பிழை: {e}"
+            response = model.generate_content(prompt_content)
+            block_text = response.text
+        except Exception as e:
+            block_text = f"⚠️ தற்காலிக சர்வர் பிழை: {e}"
 
         full_book.append(f"\n\n---\n## 📖 {block['title']}\n\n" + block_text)
         progress_bar.progress((b_idx + 1) / 11)
@@ -402,27 +377,9 @@ if "prediction_book" in st.session_state:
     if st.button("பதில் பெறுக"):
         if user_q:
             with st.spinner("⏳ சப்-லார்ட் மற்றும் தசா-புக்தியை ஆய்வு செய்கிறது..."):
-                client = genai.Client(api_key=GEMINI_API_KEY)
-                qa_prompt = f"""
-ஜாதகர் தரவு & வாழ்நாள் தசா-புக்தி:
-{st.session_state['chart_data']}
-
-கேள்வி: "{user_q}"
-
-விதிகள்:
-எளிய தமிழில், நேரடி உண்மையை மட்டும் பேசவும் (No Sugarcoating). ஆட்சி/உச்ச பலம், மறுப்பு vs நிகழ்வு முறை தணிக்கை விதிகளைப் பின்பற்றி, சப்-லார்ட் & தசா-புக்தி அடிப்படையில் எப்போது நடக்கும் (Month/Year) எனக் கணித்து எளிய பரிகாரம் கூறுக.
-"""
+                qa_model = genai.GenerativeModel('gemini-1.5-flash', system_instruction="நீங்கள் 40+ வருட அனுபவமிக்க ஜோதிட ஆச்சாரியார். எளிய தமிழில் நேரடி உண்மையை மட்டும் பேசவும்.")
                 try:
-                    ans = client.models.generate_content(
-                        model="gemini-2.0-flash-exp", 
-                        contents=qa_prompt,
-                        config=types.GenerateContentConfig(system_instruction=SYSTEM_RULES)
-                    )
+                    ans = qa_model.generate_content(f"ஜாதகர் தரவு: {st.session_state['chart_data']}\nகேள்வி: {user_q}")
                     st.write(ans.text)
-                except Exception:
-                    ans = client.models.generate_content(
-                        model="gemini-1.5-pro", 
-                        contents=qa_prompt,
-                        config=types.GenerateContentConfig(system_instruction=SYSTEM_RULES)
-                    )
-                    st.write(ans.text)
+                except Exception as q_err:
+                    st.error(f"பிழை: {q_err}")
